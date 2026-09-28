@@ -77,7 +77,7 @@ the defect showing, not a broken test.
 | **Playwright + TypeScript** | Playwright 1.6x, strict TypeScript, Biome for lint/format |
 | **Cross-browser / platform** | Projects `chromium` (Chrome engine) and `webkit` (Safari engine) run the same UI specs. CI adds an OS matrix: Linux, Windows and macOS |
 | **Modular design** | A 3-layer Page Object Model, a separate API client, and fixtures composed with `mergeTests` (see [Structure](#structure)) |
-| **CI/CD** | GitHub Actions: every test case on each push to `main`, smoke on pull requests, nightly run on Chromium and WebKit, and manual runs that choose scope, browser and OS. Sharded |
+| **CI/CD** | GitHub Actions, run on demand: choose scope, browser and OS; sharded; the combined Allure report is published to GitHub Pages. Push, pull-request and nightly triggers are prepared but switched off |
 | **Configurable parameters** | `.env` / environment variables for environment, URLs, workers, headless mode, screen size, slow-mo and performance budgets ([configs/.env.sample](configs/.env.sample)) |
 | **Comprehensive reporting** | Playwright HTML (trace, screenshot and video on failure), Allure (numbered steps, tags, attached metrics; published to GitHub Pages), JSON, a console reporter, and GitHub annotations on CI. Optional Slack and e-mail notifications |
 | **UI tests** | `tests/ui/` covers login, cart and checkout, plus one end-to-end journey |
@@ -206,15 +206,21 @@ scope with `--grep @smoke` or `--grep @regression`.
 
 [.github/workflows/playwright.yml](.github/workflows/playwright.yml)
 
-| Trigger | Runs |
-|---|---|
-| Push to `main` | **Every test case** on Chromium / Linux, plus all API and performance tests |
-| Pull request | `@smoke` only on Chromium — a fast gate for review |
-| Nightly (02:00 UTC) | Every test case on Chromium **and** WebKit |
-| Manual (**Run workflow**) | Choose scope (default: all), browser (or all), OS (Linux/Windows/macOS/all), or a single spec file or test ID |
+The pipeline is **manual-only**: open **Actions → Playwright Tests → Run
+workflow** and choose:
 
-**Allure report:** every run except pull requests publishes the combined
-report to **https://nguyenhuuthinh0611.github.io/demoblaze-playwright-exam/**
+| Input | Options | Default |
+|---|---|---|
+| Scope | smoke / regression / all | all (every test case) |
+| Browser | chromium / webkit / all | chromium |
+| OS | Linux / Windows / macOS / all | Linux |
+| Test target | a spec file or a test ID (e.g. `LOGIN-015`) | empty (use the scope) |
+
+API and performance tests run in every workflow run. Automatic triggers (on
+push, on pull request, nightly) are ready in the workflow but switched off;
+see the comment at the top of the file to re-enable them.
+
+**Allure report:** every run publishes the combined report to **https://nguyenhuuthinh0611.github.io/demoblaze-playwright-exam/**
 (the latest run replaces the previous one). Each run also attaches it as a
 downloadable artifact, `allure-report-<run number>`, next to the Playwright
 HTML reports and the traces of any failures.

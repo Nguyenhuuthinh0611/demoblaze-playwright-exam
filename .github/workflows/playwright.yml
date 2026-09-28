@@ -1,19 +1,15 @@
 name: Playwright Tests
 
-# What runs when (see the `setup` job for the exact rules):
-#   push to main       → every test case (all scopes) on Chromium / Linux
-#   pull request       → @smoke only on Chromium — a fast gate for review
-#   nightly 02:00 UTC  → every test case on Chromium AND WebKit
-#   manual dispatch    → choose scope, browser and OS (defaults: all, Chromium)
-# The combined Allure report is published to GitHub Pages on every run
-# except pull requests, and attached to the run as an artifact.
+# Manual-only for now: runs start from Actions → "Playwright Tests" → Run
+# workflow, choosing scope, browser and OS (defaults: every case, Chromium,
+# Linux). To make it automatic again, add back e.g.
+#   push: { branches: [main] }        # every case on each push
+#   pull_request:                     # @smoke gate (see the setup job)
+#   schedule: [{ cron: "0 2 * * *" }] # nightly, Chromium + WebKit
+# The `setup` job already handles those events if they are re-enabled.
+# The combined Allure report is published to GitHub Pages on every run and
+# attached to the run as an artifact.
 on:
-  push:
-    branches: [main]
-  pull_request:
-  schedule:
-    # Nightly regression, 02:00 UTC.
-    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       scope:
