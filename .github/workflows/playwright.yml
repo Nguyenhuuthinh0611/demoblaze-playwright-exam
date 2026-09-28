@@ -1,9 +1,12 @@
 name: Playwright Tests
 
-# Push / pull request run the smoke scope on Chromium (Linux) — a fast gate.
-# Everything wider (regression, more browsers, Windows/macOS) is a manual
-# workflow_dispatch run, or the nightly schedule. Unset inputs on push/PR fall
-# back to the defaults in the `setup` job below.
+# What runs when (see the `setup` job for the exact rules):
+#   push to main       → every test case (all scopes) on Chromium / Linux
+#   pull request       → @smoke only on Chromium — a fast gate for review
+#   nightly 02:00 UTC  → every test case on Chromium AND WebKit
+#   manual dispatch    → choose scope, browser and OS (defaults: all, Chromium)
+# The combined Allure report is published to GitHub Pages on every run
+# except pull requests, and attached to the run as an artifact.
 on:
   push:
     branches: [main]
@@ -17,7 +20,7 @@ on:
         description: "Test scope to run"
         type: choice
         options: [smoke, regression, all]
-        default: smoke
+        default: all
       test_target:
         description: >-
           Optional: a single spec file (tests/ui/login.spec.ts) or a
@@ -59,8 +62,12 @@ jobs:
           # API/webhook caller passes no inputs at all, and an empty string
           # must not mean "run everything".
           SCOPE="${{ github.event.inputs.scope }}"
-          # The nightly schedule has no inputs; it runs the full regression.
-          if [ "${{ github.event_name }}" = "schedule" ]; then SCOPE=all; fi
+          # push and the nightly schedule have no inputs: they run every case.
+          # A pull request only needs the fast smoke gate.
+          case "${{ github.event_name }}" in
+            push|schedule) SCOPE=all ;;
+            pull_request)  SCOPE=smoke ;;
+          esac
           case "$SCOPE" in
             regression) echo "grep=@regression" >> "$GITHUB_OUTPUT" ;;
             all)        echo "grep=" >> "$GITHUB_OUTPUT" ;;
@@ -389,6 +396,25 @@ jobs:
           npm run allure:report
           echo "generated=true" >> "$GITHUB_OUTPUT"
 
+      # Always downloadable from the run's Summary page, Pages or not.
+      - name: Upload combined Allure report
+        if: steps.combined-report.outputs.generated == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-${{ github.run_number }}
+          path: allure-report/
+          retention-days: 14
+
+      # Hands the report to the deploy-report job below. Skipped for pull
+      # requests, so a PR never replaces the report of main.
+      - name: Package report for GitHub Pages
+        if: steps.combined-report.outputs.generated == 'true' && github.event_name != 'pull_request'
+        continue-on-error: true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: allure-report/
+
       # Cloudflare Pages: free, nothing to maintain, and works with a private
       # repo on a free GitHub account (unlike GitHub Pages) since it only
       # receives the built folder.
@@ -445,7 +471,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEST_RESULT: ${{ steps.combine.outputs.result }}
           ALLURE_COUNTS: ${{ needs.test.outputs.allure_counts }}
-          ALLURE_REPORT_URL: ${{ steps.cloudflare-deploy.outputs.url || needs.test.outputs.allure_url }}
+          ALLURE_REPORT_URL: ${{ steps.cloudflare-deploy.outputs.url || needs.test.outputs.allure_url || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
         run: npm run notify:slack
 
       - name: Send email notification
@@ -457,5 +483,26 @@ jobs:
           NOTIFY_EMAIL_TO: ${{ vars.NOTIFY_EMAIL_TO }}
           TEST_RESULT: ${{ steps.combine.outputs.result }}
           ALLURE_COUNTS: ${{ needs.test.outputs.allure_counts }}
-          ALLURE_REPORT_URL: ${{ steps.cloudflare-deploy.outputs.url || needs.test.outputs.allure_url }}
+          ALLURE_REPORT_URL: ${{ steps.cloudflare-deploy.outputs.url || needs.test.outputs.allure_url || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
         run: npm run notify:email
+
+  # Publishes the combined Allure report to GitHub Pages:
+  #   https://<owner>.github.io/<repo>/
+  # Needs Settings → Pages → Source = "GitHub Actions" (enabled once). The
+  # job gets only the two permissions deploy-pages requires.
+  deploy-report:
+    needs: report
+    if: always() && needs.report.result == 'success' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Allure report to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

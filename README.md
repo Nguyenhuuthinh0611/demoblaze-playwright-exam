@@ -77,9 +77,9 @@ the defect showing, not a broken test.
 | **Playwright + TypeScript** | Playwright 1.6x, strict TypeScript, Biome for lint/format |
 | **Cross-browser / platform** | Projects `chromium` (Chrome engine) and `webkit` (Safari engine) run the same UI specs. CI adds an OS matrix: Linux, Windows and macOS |
 | **Modular design** | A 3-layer Page Object Model, a separate API client, and fixtures composed with `mergeTests` (see [Structure](#structure)) |
-| **CI/CD** | GitHub Actions: smoke on every push/PR, nightly full regression, and manual runs that choose scope, browser and OS. Sharded, with per-job reports |
+| **CI/CD** | GitHub Actions: every test case on each push to `main`, smoke on pull requests, nightly run on Chromium and WebKit, and manual runs that choose scope, browser and OS. Sharded |
 | **Configurable parameters** | `.env` / environment variables for environment, URLs, workers, headless mode, screen size, slow-mo and performance budgets ([configs/.env.sample](configs/.env.sample)) |
-| **Comprehensive reporting** | Playwright HTML (trace, screenshot and video on failure), Allure (numbered steps, tags, attached metrics), JSON, a console reporter, and GitHub annotations on CI. Optional Slack and e-mail notifications |
+| **Comprehensive reporting** | Playwright HTML (trace, screenshot and video on failure), Allure (numbered steps, tags, attached metrics; published to GitHub Pages), JSON, a console reporter, and GitHub annotations on CI. Optional Slack and e-mail notifications |
 | **UI tests** | `tests/ui/` covers login, cart and checkout, plus one end-to-end journey |
 | **API tests** | `tests/api/` covers catalogue, auth and cart endpoints, and runs without a browser |
 | **Regression** | Tests are tagged `@smoke` (core happy paths) or `@regression` (everything else). Run a scope with `--grep` |
@@ -208,15 +208,20 @@ scope with `--grep @smoke` or `--grep @regression`.
 
 | Trigger | Runs |
 |---|---|
-| Push to `main`, pull request | `@smoke` on Chromium / Linux, plus API and performance smoke |
-| Nightly (02:00 UTC) | Full regression on Chromium and WebKit |
-| Manual (**Run workflow**) | Choose scope (smoke/regression/all), browser (or all), OS (Linux/Windows/macOS/all), or a single spec file or test ID |
+| Push to `main` | **Every test case** on Chromium / Linux, plus all API and performance tests |
+| Pull request | `@smoke` only on Chromium — a fast gate for review |
+| Nightly (02:00 UTC) | Every test case on Chromium **and** WebKit |
+| Manual (**Run workflow**) | Choose scope (default: all), browser (or all), OS (Linux/Windows/macOS/all), or a single spec file or test ID |
 
-Each UI browser leg is split into 2 shards. Every job uploads its Playwright
-HTML report, traces of failures and Allure results. A final job merges them
-into one Allure report. Publishing that report to Cloudflare Pages, and the
-Slack and e-mail notifications, are optional: they switch on only when their
-secrets or variables are configured.
+**Allure report:** every run except pull requests publishes the combined
+report to **https://nguyenhuuthinh0611.github.io/demoblaze-playwright-exam/**
+(the latest run replaces the previous one). Each run also attaches it as a
+downloadable artifact, `allure-report-<run number>`, next to the Playwright
+HTML reports and the traces of any failures.
+
+Each UI browser leg is split into 2 shards. Publishing to Cloudflare Pages,
+and the Slack and e-mail notifications, are optional: they switch on only
+when their secrets or variables are configured.
 
 ---
 
