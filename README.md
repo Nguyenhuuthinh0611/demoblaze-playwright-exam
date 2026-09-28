@@ -279,5 +279,10 @@ source-code evidence for each defect.
 - **Another environment:** set `ENV=staging` with `STAGING_URL` and
   `STAGING_API_URL`.
 
-Type-checking, linting and the full command list are in
-[CONTRIBUTING.md → Commands](CONTRIBUTING.md#commands).
+Before committing:
+
+```bash
+npx tsc --noEmit    # type-check (run before formatting)
+npm run check       # Biome lint
+npm run fix         # Biome lint and fix
+```
