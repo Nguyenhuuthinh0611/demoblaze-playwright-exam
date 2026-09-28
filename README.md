@@ -216,9 +216,9 @@ workflow** and choose:
 | OS | Linux / Windows / macOS / all | Linux |
 | Test target | a spec file or a test ID (e.g. `LOGIN-015`) | empty (use the scope) |
 
-API and performance tests run in every workflow run. Automatic triggers (on
-push, on pull request, nightly) are ready in the workflow but switched off;
-see the comment at the top of the file to re-enable them.
+API and performance tests run in every workflow run. The automatic triggers
+(on push, on pull request, nightly) are already in the workflow, commented
+out under `on:`; uncomment the ones you want to switch them on.
 
 **Allure report:** every run publishes the combined report to **https://nguyenhuuthinh0611.github.io/demoblaze-playwright-exam/**
 (the latest run replaces the previous one). Each run also attaches it as a
