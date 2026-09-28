@@ -1,0 +1,461 @@
+name: Playwright Tests
+
+# Push / pull request run the smoke scope on Chromium (Linux) — a fast gate.
+# Everything wider (regression, more browsers, Windows/macOS) is a manual
+# workflow_dispatch run, or the nightly schedule. Unset inputs on push/PR fall
+# back to the defaults in the `setup` job below.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly regression, 02:00 UTC.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Test scope to run"
+        type: choice
+        options: [smoke, regression, all]
+        default: smoke
+      test_target:
+        description: >-
+          Optional: a single spec file (tests/ui/login.spec.ts) or a
+          single test-case ID (LOGIN-001) instead of the scope above.
+        type: string
+        required: false
+        default: ""
+      browser:
+        description: "Browser(s) to run"
+        type: choice
+        options: [chromium, webkit, all]
+        default: chromium
+      os:
+        description: "Operating system(s) for the UI legs"
+        type: choice
+        options: [ubuntu-latest, windows-latest, macos-latest, all]
+        default: ubuntu-latest
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Resolves the inputs ONCE instead of each job repeating the same checks,
+  # and emits the browser list as JSON so the test job's matrix can be built
+  # from it with fromJSON().
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      grep: ${{ steps.compute.outputs.grep }}
+      target_file: ${{ steps.compute.outputs.target_file }}
+      target_id: ${{ steps.compute.outputs.target_id }}
+      browsers: ${{ steps.compute.outputs.browsers }}
+      oses: ${{ steps.compute.outputs.oses }}
+    steps:
+      - id: compute
+        run: |
+          # Defensive fallbacks throughout: a workflow_dispatch fired by an
+          # API/webhook caller passes no inputs at all, and an empty string
+          # must not mean "run everything".
+          SCOPE="${{ github.event.inputs.scope }}"
+          # The nightly schedule has no inputs; it runs the full regression.
+          if [ "${{ github.event_name }}" = "schedule" ]; then SCOPE=all; fi
+          case "$SCOPE" in
+            regression) echo "grep=@regression" >> "$GITHUB_OUTPUT" ;;
+            all)        echo "grep=" >> "$GITHUB_OUTPUT" ;;
+            *)          echo "grep=@smoke" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+          TEST_TARGET="${{ github.event.inputs.test_target }}"
+          TARGET_FILE=""
+          TARGET_ID=""
+          if [ -n "$TEST_TARGET" ]; then
+            case "$TEST_TARGET" in
+              *.spec.ts) TARGET_FILE="$TEST_TARGET" ;;
+              *)         TARGET_ID="$TEST_TARGET" ;;
+            esac
+          fi
+          echo "target_file=$TARGET_FILE" >> "$GITHUB_OUTPUT"
+          echo "target_id=$TARGET_ID" >> "$GITHUB_OUTPUT"
+
+          BROWSER="${{ github.event.inputs.browser }}"
+          if [ "${{ github.event_name }}" = "schedule" ]; then BROWSER=all; fi
+          case "$BROWSER" in
+            webkit) BROWSERS='["webkit"]' ;;
+            all)    BROWSERS='["chromium","webkit"]' ;;
+            *)      BROWSERS='["chromium"]' ;;
+          esac
+          echo "browsers=$BROWSERS" >> "$GITHUB_OUTPUT"
+
+          case "${{ github.event.inputs.os }}" in
+            windows-latest) OSES='["windows-latest"]' ;;
+            macos-latest)   OSES='["macos-latest"]' ;;
+            all)            OSES='["ubuntu-latest","windows-latest","macos-latest"]' ;;
+            *)              OSES='["ubuntu-latest"]' ;;
+          esac
+          echo "oses=$OSES" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: setup
+    # WebKit needs roughly the WEBKIT_SCALE multiple of Chromium's budget —
+    # see playwright.config.ts. A job-level timeout that does not account for
+    # it kills the run mid-suite and reports nothing at all, which looks far
+    # worse than the slow run it actually was.
+    timeout-minutes: ${{ matrix.browser == 'webkit' && 120 || 60 }}
+    runs-on: ${{ matrix.os }}
+    # Same scripts on Linux, Windows and macOS.
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.setup.outputs.oses) }}
+        browser: ${{ fromJSON(needs.setup.outputs.browsers) }}
+        # Playwright's native --shard=N/M splits test FILES across
+        # independent processes for wall-clock time. Raise this only
+        # together with the account pool: shards x workers is the number of
+        # concurrent logins, and the pool must be at least that big (see
+        # src/fixtures/account-pool.ts).
+        shard: [1, 2]
+    # Surfaced so the report job can notify without artifacts — see "Publish
+    # this job's Allure report". The last matrix leg to finish wins these;
+    # every leg also prints its own URL as a ::notice.
+    outputs:
+      allure_url: ${{ steps.allure.outputs.url }}
+      allure_counts: ${{ steps.allure.outputs.counts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # OPTIONAL. Without data/accounts.json each worker registers its own
+      # throwaway account, so the suite runs with no secrets configured. When
+      # the TEST_ACCOUNTS_JSON secret IS set, its pool is used instead — keep
+      # it at least shards x workers entries, or two workers share an account
+      # and it shows up as unrelated assertion failures.
+      - name: Restore test accounts (if configured)
+        env:
+          TEST_ACCOUNTS_JSON: ${{ secrets.TEST_ACCOUNTS_JSON }}
+        run: |
+          if [ -n "$TEST_ACCOUNTS_JSON" ]; then
+            echo "$TEST_ACCOUNTS_JSON" > data/accounts.json
+          else
+            echo "No TEST_ACCOUNTS_JSON secret — workers will register their own accounts."
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Install only the engine this leg needs, not all three.
+      - name: Install Playwright browsers
+        run: |
+          case "${{ matrix.browser }}" in
+            webkit) npx playwright install --with-deps webkit ;;
+            *)      npx playwright install --with-deps chromium ;;
+          esac
+
+      - name: Run Playwright tests (${{ matrix.os }}, ${{ matrix.browser }}, shard ${{ matrix.shard }}/2)
+        env:
+          CI: "1"
+          # Consumed by resolveShardedIndex() (src/fixtures/account-pool.ts).
+          # testInfo.parallelIndex restarts at 0 in every separate Playwright
+          # PROCESS, so without this both shards' worker 0 pick the same
+          # pooled account and quietly corrupt each other's state.
+          SHARD: ${{ matrix.shard }}
+          # One worker per pooled account, no more. See the matrix comment.
+          WORKERS: 2
+          GREP: ${{ needs.setup.outputs.grep }}
+          TARGET_FILE: ${{ needs.setup.outputs.target_file }}
+          TARGET_ID: ${{ needs.setup.outputs.target_id }}
+        run: |
+          # A single explicit target only needs to run once — shard 1 covers
+          # it and shard 2 exits. (This lives here, not in a job-level `if:`,
+          # because the `matrix` context is not available at job level.)
+          if [ -n "$TARGET_FILE" ] || [ -n "$TARGET_ID" ]; then
+            if [ "${{ matrix.shard }}" != "1" ]; then
+              echo "Single test_target requested — covered by shard 1, skipping."
+              exit 0
+            fi
+          fi
+
+          if [ -n "$TARGET_FILE" ]; then
+            npx playwright test --project=${{ matrix.browser }} "$TARGET_FILE"
+            exit $?
+          fi
+          if [ -n "$TARGET_ID" ]; then
+            npx playwright test --project=${{ matrix.browser }} --grep "$TARGET_ID"
+            exit $?
+          fi
+
+          if [ -n "$GREP" ]; then
+            npx playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/2 --grep "$GREP" --pass-with-no-tests
+          else
+            npx playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/2 --pass-with-no-tests
+          fi
+
+      # Publishes THIS leg's report directly, with no artifact in between.
+      #
+      # Why it matters: the combined report below downloads `allure-results-*`
+      # artifacts, so when artifact upload fails the entire reporting chain
+      # fails with it. That is not hypothetical — an account whose Actions
+      # storage quota is exhausted fails every upload with "Artifact storage
+      # quota has been hit", and that quota is metered over the BILLING
+      # PERIOD (GB-month): deleting old artifacts does not free it, only the
+      # period reset does. Reporting should not be able to disappear because
+      # of a storage bill.
+      #
+      # --branch gives each leg its own preview URL on the same Pages
+      # project, so concurrent legs do not overwrite one another.
+      - name: Publish this job's Allure report
+        id: allure
+        if: always() && vars.CLOUDFLARE_ACCOUNT_ID != ''
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'playwright-allure-report' }}
+        run: |
+          if [ ! -d allure-results ] || [ -z "$(ls -A allure-results 2>/dev/null)" ]; then
+            echo "No allure-results to publish — skipping."
+            exit 0
+          fi
+          npm run allure:report
+          npx --yes wrangler@4 pages deploy allure-report \
+            --project-name "$PAGES_PROJECT" \
+            --branch=${{ matrix.os }}-${{ matrix.browser }}-shard${{ matrix.shard }} \
+            --commit-dirty=true | tee wrangler.log
+          URL=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' wrangler.log | tail -1 || true)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          # Reuses scripts/lib/allure-summary.js rather than counting files
+          # here: a retried test writes one -result.json PER ATTEMPT, and
+          # that library groups them by historyId, so a test that failed then
+          # passed is counted once, as passed — matching what the report
+          # itself shows.
+          node -e '
+            const { countAllureResults } = require("./scripts/lib/allure-summary");
+            const c = countAllureResults("allure-results");
+            require("fs").appendFileSync(
+              process.env.GITHUB_OUTPUT,
+              `counts=${c.passed},${c.failed},${c.broken},${c.skipped}\n`,
+            );
+          '
+          if [ -n "$URL" ]; then
+            echo "::notice title=Allure (${{ matrix.os }}-${{ matrix.browser }}-shard${{ matrix.shard }})::$URL"
+          fi
+
+      # Every artifact upload below is continue-on-error: the report above
+      # does not depend on them, so a storage-quota failure must not turn a
+      # green test run red. Retention is per artifact's actual usefulness.
+      - name: Upload Playwright Report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_number }}-${{ matrix.os }}-${{ matrix.browser }}-shard${{ matrix.shard }}
+          path: playwright-report/
+          # Duplicates what the Allure report already shows, which is kept far longer.
+          retention-days: 3
+
+      - name: Upload Allure results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ github.run_number }}-${{ matrix.os }}-${{ matrix.browser }}-shard${{ matrix.shard }}
+          path: allure-results/
+          # Consumed by the report job WITHIN this same run and by nothing
+          # after. These are also the highest-volume artifact (hundreds of
+          # small files per leg) — the accumulation is exactly what exhausts
+          # a storage quota.
+          retention-days: 1
+
+      - name: Upload Playwright Trace
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ github.run_number }}-${{ matrix.os }}-${{ matrix.browser }}-shard${{ matrix.shard }}
+          path: test-results/
+          # The heaviest artifact per file, only ever opened to debug a
+          # failure while it is still fresh.
+          retention-days: 3
+
+  # API and performance projects: no browser matrix (API needs none;
+  # performance is Chromium-only by design), no shards — both are small.
+  api-performance:
+    needs: setup
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore test accounts (if configured)
+        env:
+          TEST_ACCOUNTS_JSON: ${{ secrets.TEST_ACCOUNTS_JSON }}
+        run: |
+          if [ -n "$TEST_ACCOUNTS_JSON" ]; then
+            echo "$TEST_ACCOUNTS_JSON" > data/accounts.json
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium (performance project)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run API and performance tests
+        env:
+          CI: "1"
+          WORKERS: 2
+          GREP: ${{ needs.setup.outputs.grep }}
+        run: |
+          if [ -n "$GREP" ]; then
+            npx playwright test --project=api --project=performance --grep "$GREP"
+          else
+            npx playwright test --project=api --project=performance
+          fi
+
+      - name: Upload Allure results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ github.run_number }}-api-performance
+          path: allure-results/
+          retention-days: 1
+
+      - name: Upload Playwright Report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_number }}-api-performance
+          path: playwright-report/
+          retention-days: 3
+
+  report:
+    needs: [test, api-performance]
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    # always(), GitHub's own documented pattern for "run even if a dependency
+    # failed". A custom needs.*.result condition here is a known trap: with a
+    # hyphenated job id it silently evaluates to a skip on every run.
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download Allure results
+        # Best-effort: each test leg published its own report already, so
+        # this combined one is a convenience, not the reporting path.
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results/
+          merge-multiple: true
+
+      - name: Generate combined Allure report
+        id: combined-report
+        run: |
+          if [ ! -d allure-results ] || [ -z "$(ls -A allure-results 2>/dev/null)" ]; then
+            echo "No allure-results downloaded — the per-job reports are the ones to read."
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npm run allure:report
+          echo "generated=true" >> "$GITHUB_OUTPUT"
+
+      # Cloudflare Pages: free, nothing to maintain, and works with a private
+      # repo on a free GitHub account (unlike GitHub Pages) since it only
+      # receives the built folder.
+      #
+      # Deployed by invoking the wrangler CLI in a plain `run:` step, NOT via
+      # a marketplace action. cloudflare/pages-action@v1 used to live here
+      # until its repository was deleted upstream (404), and GitHub resolves
+      # every `uses:` during "Set up job" — BEFORE any step runs — so an
+      # unresolvable action fails the whole job, and neither continue-on-error
+      # nor an `if:` can prevent it. A `run:` step is also immune to an org
+      # policy that blocks third-party actions.
+      - name: Deploy combined report to Cloudflare Pages
+        id: cloudflare-deploy
+        continue-on-error: true
+        if: steps.combined-report.outputs.generated == 'true' && vars.CLOUDFLARE_ACCOUNT_ID != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'playwright-allure-report' }}
+        run: |
+          set -o pipefail
+          npx --yes wrangler@4 pages deploy allure-report \
+            --project-name "$PAGES_PROJECT" \
+            --commit-dirty=true | tee wrangler.log
+          URL=$(grep -oE 'https://[a-z0-9.-]+\.pages\.dev' wrangler.log | tail -1 || true)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          if [ -z "$URL" ]; then
+            echo "::warning::Could not parse a *.pages.dev URL from wrangler's output — the notification will have no report link."
+          fi
+
+      # The run's verdict comes from the TESTS, never from whether the report
+      # published — always(), so a failed publish upstream cannot stop this.
+      - name: Compute overall test result
+        if: always()
+        id: combine
+        run: |
+          if [ "${{ needs.test.result }}" = "success" ] && [ "${{ needs.api-performance.result }}" = "success" ]; then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A notification that cannot be delivered is not a test failure — both
+      # are continue-on-error, and both scripts self-skip when their own
+      # credentials are unset (the `secrets` context is NOT available in a
+      # step-level `if:`, so gating on it there would be a workflow error). ALLURE_COUNTS comes from the test legs
+      # themselves, because this job's own allure-results/ is empty whenever
+      # the download was blocked; without it the message still sends but
+      # reports 0/0/0/0, which reads as "nothing ran".
+      - name: Send Slack notification
+        if: always()
+        continue-on-error: true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TEST_RESULT: ${{ steps.combine.outputs.result }}
+          ALLURE_COUNTS: ${{ needs.test.outputs.allure_counts }}
+          ALLURE_REPORT_URL: ${{ steps.cloudflare-deploy.outputs.url || needs.test.outputs.allure_url }}
+        run: npm run notify:slack
+
+      - name: Send email notification
+        if: always()
+        continue-on-error: true
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SENDGRID_FROM_EMAIL: ${{ vars.SENDGRID_FROM_EMAIL }}
+          NOTIFY_EMAIL_TO: ${{ vars.NOTIFY_EMAIL_TO }}
+          TEST_RESULT: ${{ steps.combine.outputs.result }}
+          ALLURE_COUNTS: ${{ needs.test.outputs.allure_counts }}
+          ALLURE_REPORT_URL: ${{ steps.cloudflare-deploy.outputs.url || needs.test.outputs.allure_url }}
+        run: npm run notify:email

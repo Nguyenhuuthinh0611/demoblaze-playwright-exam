@@ -1,0 +1,89 @@
+{
+	"$schema": "https://biomejs.dev/schemas/1.8.0/schema.json",
+	"organizeImports": {
+		"enabled": true
+	},
+	"files": {
+		"ignore": [
+			"resources/**",
+			"playwright-report/**",
+			"allure-report/**",
+			"allure-results/**",
+			"test-results/**",
+			"./vscode/**"
+		]
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"correctness": {
+				"noUnusedVariables": {
+					"level": "warn",
+					"fix": "none"
+				},
+				"noUnusedImports": {
+					"level": "info"
+				}
+			},
+			"style": {
+				"useConst": {
+					"level": "warn",
+					"fix": "unsafe"
+				},
+				"useTemplate": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"noUselessElse": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"noParameterAssign": {
+					"level": "warn"
+				},
+				"useNodejsImportProtocol": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"noVar": {
+					"level": "warn",
+					"fix": "safe"
+				},
+				"noNonNullAssertion": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"useImportType": {
+					"level": "off"
+				}
+			},
+			"suspicious": {
+				"noDoubleEquals": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"noExplicitAny": {
+					"level": "off"
+				}
+			},
+			"complexity": {
+				"noUselessTernary": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"noUselessConstructor": {
+					"level": "info"
+				},
+				"useArrowFunction": {
+					"level": "off"
+				}
+			}
+		}
+	},
+	"formatter": {
+		"formatWithErrors": true,
+		"enabled": true,
+		"lineWidth": 80
+	}
+}

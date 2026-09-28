@@ -1,0 +1,15 @@
+{
+	"compilerOptions": {
+		"paths": {
+			"*": ["./*"]
+		} /* Explicit equivalent of the old bare-baseUrl resolution, without needing baseUrl itself — bare-baseUrl lookup is deprecated as of TS 7.0, but a relative paths mapping is not. */,
+		"target": "es2016" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
+		"module": "commonjs" /* Specify what module code is generated. */,
+		"esModuleInterop": true /* Emit additional JavaScript to ease support for importing CommonJS modules. This enables 'allowSyntheticDefaultImports' for type compatibility. */,
+		"forceConsistentCasingInFileNames": true /* Ensure that casing is correct in imports. */,
+		"strict": true /* Enable all strict type-checking options. */,
+		"skipLibCheck": true /* Skip type checking all .d.ts files. */,
+		"noImplicitThis": false,
+		"resolveJsonModule": true /* Allow importing .json files (e.g. data/accounts.json) as modules. */
+	}
+}

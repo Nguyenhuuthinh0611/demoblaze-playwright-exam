@@ -1,0 +1,53 @@
+{
+	"name": "demoblaze-e2e-framework",
+	"version": "1.0.0",
+	"description": "Playwright + TypeScript E2E framework for DemoBlaze: 3-layer POM, UI/API/performance test types, cross-browser, Allure reporting and GitHub Actions CI.",
+	"scripts": {
+		"test": "npx playwright test",
+		"test:ui": "npx playwright test --project=chromium",
+		"test:ui:all-browsers": "npx playwright test --project=chromium --project=webkit",
+		"test:api": "npx playwright test --project=api",
+		"test:perf": "npx playwright test --project=performance",
+		"test:smoke": "npx playwright test --grep @smoke",
+		"test:regression": "npx playwright test --grep @regression",
+		"test:headed": "HEADLESS=0 npx playwright test --project=chromium --workers=1",
+		"report": "npx playwright show-report",
+		"typecheck": "tsc --noEmit",
+		"check": "biome lint .",
+		"fix": "biome lint --write .",
+		"pre-commit": "biome lint --write .",
+		"allure:clean": "node -e \"require('fs').rmSync('allure-report',{recursive:true,force:true});require('fs').rmSync('allure-results',{recursive:true,force:true})\"",
+		"allure:serve": "node scripts/preserve-allure-history.js && npx allure open allure-results",
+		"allure:report": "node scripts/preserve-allure-history.js && npx allure awesome allure-results --output allure-report",
+		"notify:slack": "node scripts/notify-slack.js",
+		"notify:email": "node scripts/notify-email.js"
+	},
+	"keywords": [
+		"playwright",
+		"typescript",
+		"pom",
+		"automation",
+		"allure"
+	],
+	"license": "ISC",
+	"devDependencies": {
+		"@biomejs/biome": "1.8.1",
+		"@playwright/test": "^1.61.1",
+		"@types/jsonpath": "^0.2.4",
+		"@types/node": "^22.1.0",
+		"allure": "3.14.3",
+		"allure-playwright": "^3.10.2",
+		"typescript": "^5.5.4"
+	},
+	"dependencies": {
+		"@faker-js/faker": "^8.4.1",
+		"dotenv": "^16.4.5",
+		"jsonpath": "^1.3.0",
+		"log4js": "^6.9.1",
+		"nodemailer": "^9.0.3"
+	},
+	"directories": {
+		"test": "tests"
+	},
+	"type": "commonjs"
+}

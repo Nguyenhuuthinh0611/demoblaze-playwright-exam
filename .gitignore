@@ -1,0 +1,18 @@
+node_modules/
+.env
+
+# Optional real credentials — never committed. Copy data/accounts.sample.json
+# and fill it in locally; CI restores it from the TEST_ACCOUNTS_JSON secret
+# (see .github/workflows/playwright.yml).
+data/accounts.json
+
+# Run output
+test-results/
+playwright-report/
+playwright/.cache/
+allure-results/
+allure-report/
+logs/
+
+# macOS
+.DS_Store

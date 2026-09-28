@@ -1,0 +1,14 @@
+{
+	"_comment": [
+		"OPTIONAL. Without data/accounts.json the suite registers one throwaway DemoBlaze account per worker by itself.",
+		"To pin real accounts instead: copy to data/accounts.json (gitignored) and fill in credentials.",
+		"CI restores that file from the TEST_ACCOUNTS_JSON secret when it is set — see .github/workflows/playwright.yml.",
+		"ORDER MATTERS: workers pick by INDEX. The pool needs at least (shards x workers) entries — see src/fixtures/account-pool.ts."
+	],
+	"pool": [
+		{ "username": "REPLACE_ME_1", "password": "REPLACE_ME" },
+		{ "username": "REPLACE_ME_2", "password": "REPLACE_ME" },
+		{ "username": "REPLACE_ME_3", "password": "REPLACE_ME" },
+		{ "username": "REPLACE_ME_4", "password": "REPLACE_ME" }
+	]
+}
