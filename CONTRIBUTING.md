@@ -172,8 +172,10 @@ on the same account. CI must therefore pass `SHARD` (1-based) to each shard.
   the site's exact wording: the wording itself is a defect (DEF-15) and is
   checked in one place only, LOGIN-033 / API-010, against
   `GENERIC_LOGIN_ERROR`.
-- **Known defects stay executable**: `test.fail()` + a `known-defect`
-  annotation naming the DEF id from the workbook, never `test.skip()`.
+- **Known defects stay executable and red**: the test asserts the correct
+  behaviour and simply fails, with a `known-defect` annotation naming the DEF
+  id from the workbook. Never `test.skip()`, and never `test.fail()` — that
+  would report the bug as a pass and hide it from the report.
 - **Report steps**: wrap each business action in `test.step("Step N: ...")` in
   the SPEC, not inside the Page method — the same method gets reused by tests
   with different narratives, and a step name baked into the method cannot be
@@ -229,8 +231,8 @@ Each of these cost real debugging time. They are not hypothetical.
   full** (DEF-09): `/deletecart` is fire-and-forget. `CartPage.purchase()`
   waits for it; keep that wait. CART-037 reproduces the race on purpose via
   `purchaseAndConfirmImmediately()` and is annotated `known-flaky`: ~2/10 on
-  WebKit, 0/10 on Chromium. A timing-dependent defect cannot be `test.fail()`
-  (it does not fail every run) — confirm or clear it with `--repeat-each=10`.
+  WebKit, 0/10 on Chromium. Because it does not fail every run, confirm or
+  clear it with `--repeat-each=10`, never from a single pass.
 - **A bare cart row count passes transiently** while later rows are still
   loading. Always compare against the `/viewcart` line count (see
   Conventions).

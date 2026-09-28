@@ -199,9 +199,9 @@ test.describe("Place order", () => {
 			},
 		},
 		async ({ homePage }) => {
-			// Deliberately left as a normal test: it passes on Chromium, and on
-			// WebKit an occasional failure IS the evidence for DEF-09. It cannot be
-			// test.fail() because the defect does not reproduce on every run.
+			// Like every known-defect test, a failure here is reported as a real
+			// failure (the defect showing). It passes on Chromium; on WebKit it
+			// fails intermittently, because DEF-09 is a timing race.
 			const items =
 				await test.step("Step 1: Add two products and open the cart", async () =>
 					addProducts(homePage, [
@@ -313,8 +313,6 @@ test.describe("Place order", () => {
 			},
 		},
 		async ({ cartPage }) => {
-			// Expected to fail until DEF-02 is fixed.
-			test.fail();
 			await test.step("Step 1: Verify the cart is empty", async () => {
 				await cartPage.assertCartEmpty();
 			});
@@ -340,8 +338,6 @@ test.describe("Place order", () => {
 			},
 		},
 		async ({ homePage }) => {
-			// Expected to fail until DEF-06 is fixed.
-			test.fail();
 			const items = await test.step("Step 1: Add a product", async () =>
 				addProducts(homePage, [PRODUCTS.samsungGalaxyS6.title]));
 			const cartPage = await test.step("Step 2: Purchase it", async () => {
@@ -539,8 +535,6 @@ test.describe("Cart — more cases", () => {
 			},
 		},
 		async ({ homePage }) => {
-			// Expected to fail until DEF-12 is fixed.
-			test.fail();
 			const productPage = new ProductPage(homePage.getPage());
 			await test.step("Step 1: Open prod.html?idp_=99999", async () => {
 				await productPage.open(99999);
@@ -562,8 +556,6 @@ test.describe("Cart — more cases", () => {
 			},
 		},
 		async ({ homePage }) => {
-			// Expected to fail until DEF-11 is fixed.
-			test.fail();
 			const productPage = await homePage.openProduct(PRODUCTS.nexus6.title);
 			await test.step("Step 1: Make the /addtocart request fail", async () => {
 				await productPage.simulateApiFailure("addtocart");
@@ -604,7 +596,6 @@ test.describe("Place order — validation", () => {
 			},
 		},
 		async ({ homePage }) => {
-			test.fail();
 			const cartPage =
 				await test.step("Step 1: Submit an order with card 'abcd-xyz'", async () =>
 					submitOrder(homePage, { name: "QA Automation", card: "abcd-xyz" }));
@@ -630,7 +621,6 @@ test.describe("Place order — validation", () => {
 				},
 			},
 			async ({ homePage }) => {
-				test.fail();
 				const cartPage =
 					await test.step("Step 1: Submit an order with the invalid date", async () =>
 						submitOrder(homePage, {
@@ -655,7 +645,6 @@ test.describe("Place order — validation", () => {
 			},
 		},
 		async ({ homePage }) => {
-			test.fail();
 			const cartPage =
 				await test.step("Step 1: Submit spaces in Name and Credit card", async () =>
 					submitOrder(homePage, { name: "   ", card: "   " }));
@@ -696,8 +685,6 @@ test.describe("Guest cart — more cases", () => {
 			},
 		},
 		async ({ homePage, account }) => {
-			// Expected to fail until DEF-17 is fixed.
-			test.fail();
 			const productPage = await homePage.openProduct(PRODUCTS.nexus6.title);
 			const product = await productPage.getProductDetails();
 			await test.step("Step 1: Add a product as a guest", async () => {

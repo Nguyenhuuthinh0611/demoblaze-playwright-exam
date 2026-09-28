@@ -137,8 +137,6 @@ test.describe("API: account enumeration", () => {
 			},
 		},
 		async ({ demoblazeApi, account }) => {
-			// Expected to fail until DEF-15 is fixed.
-			test.fail();
 			const unknownUser = await demoblazeApi.login(
 				`nouser_${randomCode(12)}`,
 				"x",

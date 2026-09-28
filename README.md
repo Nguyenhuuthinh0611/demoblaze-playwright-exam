@@ -58,10 +58,13 @@ npm run allure:serve         # Allure report: steps, tags, attached metrics, his
 The UI suite is 60 tests per browser; WebKit takes roughly twice as long as
 Chromium. Timings depend on the public site's latency on the day.
 
-Fourteen UI tests per browser (and one API test) are shown as `✘` yet counted
-as **passed**. These are known-defect tests (see [Defects found](#defects-found)). They are marked
-`test.fail()`, so the suite stays green while the defect exists, and it goes
-red the moment the defect is fixed, prompting someone to flip the test.
+**Fourteen UI tests per browser and one API test FAIL on purpose, and are reported
+as failed**: each one checks the correct behaviour and exposes a confirmed
+defect of the site (see [Defects found](#defects-found)). Every one carries a
+`known-defect` annotation with its DEF id, so a failure in the report points
+straight at the bug. The same cases are marked Fail in the test case
+workbook. A run is therefore red while those defects are open; any failure
+*outside* that list is a new problem.
 
 One test is **expected to be flaky on WebKit**: CART-037 reproduces a timing
 race (DEF-09) that leaves the cart full in about 2 of 10 WebKit runs, and never
@@ -155,9 +158,10 @@ about 1 s instead of a UI login. The UI login itself is covered by its own
 spec and by the end-to-end journey. Each cart test therefore fails only for
 cart reasons.
 
-**Known defects are executable.** A defect found during test design stays in
-the suite as a `test.fail()` test with a `known-defect` annotation, instead
-of being skipped.
+**Known defects are executable and visible.** A defect stays in the suite as
+a test that asserts the correct behaviour and fails, annotated `known-defect`
+with its DEF id — never skipped, and never hidden as a pass. The report and
+the workbook therefore agree on what is broken.
 
 ### Test accounts
 

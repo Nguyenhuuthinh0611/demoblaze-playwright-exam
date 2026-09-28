@@ -236,9 +236,6 @@ test.describe("Login", () => {
 				},
 			},
 			async ({ homePage }) => {
-				// Expected to fail until DEF-01 is fixed; Playwright flags it the
-				// moment it starts passing, so the fix cannot go unnoticed.
-				test.fail();
 				await test.step("Step 1: Submit spaces in both fields", async () => {
 					await homePage.attemptLogin("   ", "   ");
 				});
@@ -271,8 +268,6 @@ test.describe("Login", () => {
 				},
 			},
 			async ({ homePage, account }) => {
-				// Expected to fail until DEF-16 is fixed.
-				test.fail();
 				await test.step("Step 1: Enter the valid username wrapped in spaces", async () => {
 					await homePage.openLoginModal();
 					await homePage.fillLoginForm(
@@ -341,8 +336,6 @@ test.describe("Login", () => {
 				},
 			},
 			async ({ homePage, account }) => {
-				// Expected to fail until DEF-15 is fixed.
-				test.fail();
 				const unknownUser =
 					await test.step("Step 1: Submit an unregistered username", async () => {
 						await homePage.attemptLogin(
@@ -477,8 +470,6 @@ test.describe("Login", () => {
 				},
 			},
 			async ({ homePage, account }) => {
-				// Expected to fail until DEF-08 is fixed.
-				test.fail();
 				await test.step("Step 1: Fill valid credentials", async () => {
 					await homePage.openLoginModal();
 					await homePage.fillLoginForm(account.username, account.password);
@@ -521,8 +512,6 @@ test.describe("Login", () => {
 				},
 			},
 			async ({ homePage, account }) => {
-				// Expected to fail until DEF-13 is addressed.
-				test.fail();
 				await test.step("Step 1: Submit a wrong password 10 times", async () => {
 					for (let i = 1; i <= 10; i++) {
 						await homePage.attemptLogin(
