@@ -168,6 +168,10 @@ on the same account. CI must therefore pass `SHARD` (1-based) to each shard.
   `CartPage.navigate()` / `openCart()` / `reloadPage()` — they record the
   `/viewcart` line count, which `assertItemCount()` checks first. A bare row
   count can pass transiently while later rows are still loading.
+- **Login rejections are asserted with `assertLoginRejected()`**, never with
+  the site's exact wording: the wording itself is a defect (DEF-15) and is
+  checked in one place only, LOGIN-033 / API-010, against
+  `GENERIC_LOGIN_ERROR`.
 - **Known defects stay executable**: `test.fail()` + a `known-defect`
   annotation naming the DEF id from the workbook, never `test.skip()`.
 - **Report steps**: wrap each business action in `test.step("Step N: ...")` in
@@ -223,7 +227,10 @@ Each of these cost real debugging time. They are not hypothetical.
   instead — see `CartPage.reloadPage()`.
 - **Clicking OK on the purchase confirmation immediately can leave the cart
   full** (DEF-09): `/deletecart` is fire-and-forget. `CartPage.purchase()`
-  waits for it; keep that wait.
+  waits for it; keep that wait. CART-037 reproduces the race on purpose via
+  `purchaseAndConfirmImmediately()` and is annotated `known-flaky`: ~2/10 on
+  WebKit, 0/10 on Chromium. A timing-dependent defect cannot be `test.fail()`
+  (it does not fail every run) — confirm or clear it with `--repeat-each=10`.
 - **A bare cart row count passes transiently** while later rows are still
   loading. Always compare against the `/viewcart` line count (see
   Conventions).

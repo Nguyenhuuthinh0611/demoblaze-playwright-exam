@@ -361,6 +361,20 @@ export default class CartPage extends StorePage {
 	}
 
 	/** Clicks OK on the confirmation; the site then redirects to the home page. */
+	/**
+	 * Purchase and click OK on the confirmation the instant it appears,
+	 * WITHOUT waiting for the background /deletecart call that purchase()
+	 * waits for. Reproduces a user who dismisses the dialog immediately
+	 * (CART-037). Returns once the site has navigated to the home page.
+	 */
+	async purchaseAndConfirmImmediately(): Promise<void> {
+		await this.click(CART_UI.btnPurchase);
+		await this.assertVisible(CART_UI.rootConfirmation, {
+			timeout: MODAL_TIMEOUT,
+		});
+		await this.confirmPurchase();
+	}
+
 	async confirmPurchase(): Promise<void> {
 		await this.click(CART_UI.btnConfirmationOk);
 		await this.waitForUrl(/\/index\.html/, { timeout: scaled(ROWS_TIMEOUT) });

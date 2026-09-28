@@ -7,7 +7,7 @@ typical path and edge cases. The same framework also runs API and performance
 tests.
 
 - Conventions and architecture rules: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Test case design: [docs/test-cases/demoblaze-test-cases.xlsx](docs/test-cases/demoblaze-test-cases.xlsx). It holds 60 UI cases (Login 27, Cart 33), 15 API/E2E/performance cases, 14 defects (all confirmed on the live site) with evidence, execution status from the automated runs, and a change log
+- Test case design: [docs/test-cases/demoblaze-test-cases.xlsx](docs/test-cases/demoblaze-test-cases.xlsx). It holds 61 UI cases (Login 28, Cart 33, including the end-to-end journey E2E-001), 15 API/performance cases, 17 defects (all confirmed on the live site) with evidence, execution status from the automated runs, the test data for manual runs (accounts, products, form data) and a change log
 
 
 ---
@@ -51,17 +51,22 @@ npm run allure:serve         # Allure report: steps, tags, attached metrics, his
 
 | Command | Tests | Measured time |
 |---|---|---|
-| `npm test` (UI on Chromium + WebKit, API, performance) | 124 | about 20 min (3 workers) |
-| `npm run test:api` | 9 | about 10 s |
+| `npm test` (UI on Chromium + WebKit, API, performance) | 135 | about 20 min (3 workers; measured at 124 tests) |
+| `npm run test:api` | 10 | about 10 s |
 | `npm run test:perf` | 5 | about 30 s |
 
-The UI suite is 55 tests per browser; WebKit takes roughly twice as long as
+The UI suite is 60 tests per browser; WebKit takes roughly twice as long as
 Chromium. Timings depend on the public site's latency on the day.
 
-Twelve UI tests per browser are shown as `✘` yet counted as **passed**. These
-are known-defect tests (see [Defects found](#defects-found)). They are marked
+Fourteen UI tests per browser (and one API test) are shown as `✘` yet counted
+as **passed**. These are known-defect tests (see [Defects found](#defects-found)). They are marked
 `test.fail()`, so the suite stays green while the defect exists, and it goes
 red the moment the defect is fixed, prompting someone to flip the test.
+
+One test is **expected to be flaky on WebKit**: CART-037 reproduces a timing
+race (DEF-09) that leaves the cart full in about 2 of 10 WebKit runs, and never
+on Chromium. It carries a `known-flaky` annotation; a WebKit failure there is
+the defect showing, not a broken test.
 
 ---
 
@@ -168,6 +173,11 @@ overwrite each other's carts. Each worker therefore gets its own account:
 
 In both cases the account's cart is emptied before every test.
 
+**Manual testing** uses four fixed accounts (TD-ACC-01…04, incl. a mixed-case
+and a unicode username) listed on the workbook's **Test Data** sheet, with the
+products and order-form data each case needs. They are public throwaway
+accounts, separate from the ones the automated suite registers.
+
 ---
 
 ## Configuration
@@ -213,7 +223,7 @@ secrets or variables are configured.
 ## Defects found
 
 Test design came from reading the site's client-side source. Running the
-suite then **confirmed all 14** on the live site, on both Chromium and WebKit
+suite then **confirmed all 17** on the live site, on both Chromium and WebKit
 unless noted:
 
 | ID | Defect | Test |
@@ -228,12 +238,15 @@ unless noted:
 | DEF-08 | Pressing Enter does not submit the login form | LOGIN-026 |
 | DEF-09 | The cart can stay full after a purchase if OK is clicked before the background `/deletecart` call finishes. Seen once, on WebKit; the regular suite waits for that call, as a reading user would | CART-037 |
 | DEF-10 | The purchase confirmation shows the full 16-digit card number instead of masking it | CART-033 |
-| DEF-11 | A failed API call gives the user no feedback at all (no request has an error handler) | LOGIN-029, CART-034 |
+| DEF-11 | A failed API call gives the user no feedback at all (no request has an error handler) | CART-034 |
 | DEF-12 | An invalid product id shows an `undefined` product priced `$undefined`, with a working Add to cart button | CART-023 |
 | DEF-13 | No brute-force protection: after 10 wrong passwords the correct one logs straight in | LOGIN-030 |
 | DEF-14 | Catalogue data: "Sony vaio i7" is stored with a trailing newline | found while automating CART-028 / CART-035 |
+| DEF-15 | Login errors reveal which usernames exist ("User does not exist." vs "Wrong password.") instead of one generic message | LOGIN-033, API-010 |
+| DEF-16 | Spaces around a valid username are not trimmed, so a correct login is rejected as "User does not exist." | LOGIN-022 |
+| DEF-17 | Items added to the cart as a guest are lost when the user logs in, instead of being merged into the account cart | CART-026 |
 
-DEF-12 and DEF-13 are judged against common industry practice, because
+DEF-12, DEF-13 and DEF-15 are judged against common industry practice, because
 DemoBlaze publishes no requirements. The workbook's Findings sheet has the
 source-code evidence for each defect.
 

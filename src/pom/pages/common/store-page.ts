@@ -1,5 +1,6 @@
 import type { Dialog, Page, TestInfo } from "@playwright/test";
 import { getBaseUrl } from "configs/url";
+import { ALERTS, GENERIC_LOGIN_ERROR } from "src/data/demoblaze-data";
 import { expect } from "@playwright/test";
 import Popup from "src/base/base-popup";
 import BasePage from "src/base/base-page";
@@ -315,6 +316,37 @@ export default abstract class StorePage extends BasePage {
 			this.lastAlerts.length > 0 || inlineError.length > 0,
 			"The action failed silently: no alert and no inline error message",
 		).toBe(true);
+	}
+
+	/** The message of the last alert a Page action captured, if any. */
+	getLastAlert(): string | undefined {
+		return this.lastAlertMessage;
+	}
+
+	/**
+	 * The last login attempt was refused with an error alert — any error
+	 * other than the required-fields check, which means the form was not even
+	 * submitted. Deliberately not tied to the site's exact wording (see
+	 * assertGenericLoginError() for the wording rule).
+	 */
+	async assertLoginRejected(): Promise<void> {
+		expect(
+			this.lastAlertMessage,
+			"No alert was captured — the login was not rejected",
+		).toBeDefined();
+		expect(this.lastAlertMessage).not.toBe(ALERTS.loginFieldsRequired);
+	}
+
+	/**
+	 * Every failed login shows the SAME generic message, so it does not reveal
+	 * whether the username exists. Compares all given messages at once, so a
+	 * failure shows every actual message side by side.
+	 */
+	async assertGenericLoginError(
+		messages: (string | undefined)[],
+	): Promise<void> {
+		logger.info(`Login error messages: ${JSON.stringify(messages)}`);
+		expect(messages).toEqual(messages.map(() => GENERIC_LOGIN_ERROR));
 	}
 
 	/** Asserts the last alert captured by a Page action had exactly `message`. */

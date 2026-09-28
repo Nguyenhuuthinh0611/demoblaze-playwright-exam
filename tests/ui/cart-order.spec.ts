@@ -189,6 +189,40 @@ test.describe("Place order", () => {
 	);
 
 	test(
+		"CART-037: The cart is cleared even when OK is clicked immediately after purchase",
+		{
+			tag: "@regression",
+			annotation: {
+				type: "known-flaky",
+				description:
+					"DEF-09: on WebKit ~2 in 10 runs the cart stays full (race between /deletecart and the OK navigation); Chromium 0/10. A WebKit failure here is the defect, not a broken test.",
+			},
+		},
+		async ({ homePage }) => {
+			// Deliberately left as a normal test: it passes on Chromium, and on
+			// WebKit an occasional failure IS the evidence for DEF-09. It cannot be
+			// test.fail() because the defect does not reproduce on every run.
+			const items =
+				await test.step("Step 1: Add two products and open the cart", async () =>
+					addProducts(homePage, [
+						PRODUCTS.nokiaLumia1520.title,
+						PRODUCTS.sonyVaioI5.title,
+					]));
+			const cartPage = await homePage.openCart();
+			await cartPage.assertContainsExactly(items);
+			await test.step("Step 2: Purchase and click OK the instant the confirmation appears", async () => {
+				await cartPage.openPlaceOrder();
+				await cartPage.fillOrderForm(buildOrderDetails());
+				await cartPage.purchaseAndConfirmImmediately();
+			});
+			await test.step("Step 3: Open the cart and verify it is empty", async () => {
+				await cartPage.navigate();
+				await cartPage.assertCartEmpty();
+			});
+		},
+	);
+
+	test(
 		"CART-013: Purchase with only the required fields",
 		{ tag: "@regression" },
 		async ({ homePage }) => {
@@ -650,6 +684,35 @@ test.describe("Place order — validation", () => {
 
 test.describe("Guest cart — more cases", () => {
 	test.use({ session: "guest" });
+
+	test(
+		"CART-026: Guest cart items are kept after logging in",
+		{
+			tag: "@regression",
+			annotation: {
+				type: "known-defect",
+				description:
+					"DEF-17: guest and user carts are separate, so items added as a guest disappear on login",
+			},
+		},
+		async ({ homePage, account }) => {
+			// Expected to fail until DEF-17 is fixed.
+			test.fail();
+			const productPage = await homePage.openProduct(PRODUCTS.nexus6.title);
+			const product = await productPage.getProductDetails();
+			await test.step("Step 1: Add a product as a guest", async () => {
+				await productPage.addToCart();
+				await productPage.assertAlertShown(ALERTS.productAddedGuest);
+			});
+			await test.step("Step 2: Log in (the account's own cart is empty)", async () => {
+				await productPage.login(account.username, account.password);
+			});
+			await test.step("Step 3: Verify the guest item was merged into the account cart", async () => {
+				const cartPage = await productPage.openCart();
+				await cartPage.assertContainsExactly([product]);
+			});
+		},
+	);
 
 	test(
 		"CART-010: The guest cart persists after a reload",

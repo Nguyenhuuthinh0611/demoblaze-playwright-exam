@@ -42,11 +42,16 @@ export function buildOrderDetails(
 	};
 }
 
+/**
+ * The message a failed login SHOULD show, whichever of username or password
+ * was wrong (LOGIN-033). One message for both keeps an attacker from learning
+ * which usernames exist. DemoBlaze does not do this today (DEF-15).
+ */
+export const GENERIC_LOGIN_ERROR = "Username or password is incorrect.";
+
 /** Exact alert texts from the site's own JS (index.js, prod.js, cart.js). */
 export const ALERTS = {
 	loginFieldsRequired: "Please fill out Username and Password.",
-	userDoesNotExist: "User does not exist.",
-	wrongPassword: "Wrong password.",
 	productAddedUser: "Product added.",
 	productAddedGuest: "Product added",
 	orderFieldsRequired: "Please fill out Name and Creditcard.",

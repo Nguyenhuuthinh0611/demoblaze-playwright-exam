@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { ALERTS, PRODUCTS } from "src/data/demoblaze-data";
+import { ALERTS, GENERIC_LOGIN_ERROR, PRODUCTS } from "src/data/demoblaze-data";
 import { test } from "src/fixtures";
 import { randomCode } from "src/utils/random";
 
@@ -87,7 +87,8 @@ test.describe("API: authentication", () => {
 				account.username,
 				`${account.password}x`,
 			);
-			expect(auth).toEqual({ ok: false, errorMessage: ALERTS.wrongPassword });
+			expect(auth.ok).toBe(false);
+			expect(auth.token).toBeUndefined();
 		},
 	);
 
@@ -96,10 +97,8 @@ test.describe("API: authentication", () => {
 		{ tag: "@regression" },
 		async ({ demoblazeApi }) => {
 			const auth = await demoblazeApi.login(`nouser_${randomCode(12)}`, "x");
-			expect(auth).toEqual({
-				ok: false,
-				errorMessage: ALERTS.userDoesNotExist,
-			});
+			expect(auth.ok).toBe(false);
+			expect(auth.token).toBeUndefined();
 		},
 	);
 
@@ -122,6 +121,36 @@ test.describe("API: authentication", () => {
 			expect(
 				await demoblazeApi.whoAmI(`forged-${randomCode(16)}`),
 			).toBeUndefined();
+		},
+	);
+});
+
+test.describe("API: account enumeration", () => {
+	test(
+		"API-010: Unknown user and wrong password return the same generic error",
+		{
+			tag: "@regression",
+			annotation: {
+				type: "known-defect",
+				description:
+					"DEF-15: /login answers 'User does not exist.' vs 'Wrong password.', revealing which usernames exist",
+			},
+		},
+		async ({ demoblazeApi, account }) => {
+			// Expected to fail until DEF-15 is fixed.
+			test.fail();
+			const unknownUser = await demoblazeApi.login(
+				`nouser_${randomCode(12)}`,
+				"x",
+			);
+			const wrongPassword = await demoblazeApi.login(
+				account.username,
+				`${account.password}x`,
+			);
+			expect([unknownUser.errorMessage, wrongPassword.errorMessage]).toEqual([
+				GENERIC_LOGIN_ERROR,
+				GENERIC_LOGIN_ERROR,
+			]);
 		},
 	);
 });

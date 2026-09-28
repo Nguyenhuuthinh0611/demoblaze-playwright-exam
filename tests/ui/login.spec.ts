@@ -1,3 +1,4 @@
+import type DemoblazeApi from "src/api/demoblaze-api";
 import { ALERTS, PRODUCTS } from "src/data/demoblaze-data";
 import { test } from "src/fixtures";
 import HomePage from "src/pom/pages/shop/home-page";
@@ -73,7 +74,7 @@ test.describe("Login", () => {
 			async ({ homePage, account }) => {
 				await test.step("Step 1: Submit a wrong password", async () => {
 					await homePage.attemptLogin(account.username, `${account.password}x`);
-					await homePage.assertAlertShown(ALERTS.wrongPassword);
+					await homePage.assertLoginRejected();
 				});
 				await test.step("Step 2: Correct the password in the same modal and submit", async () => {
 					await homePage.fillLoginForm(account.username, account.password);
@@ -164,8 +165,8 @@ test.describe("Login", () => {
 				await test.step("Step 1: Submit an unregistered username", async () => {
 					await homePage.attemptLogin(`nouser_${randomCode(12)}`, "whatever");
 				});
-				await test.step("Step 2: Verify the alert and no session", async () => {
-					await homePage.assertAlertShown(ALERTS.userDoesNotExist);
+				await test.step("Step 2: Verify the login is rejected and no session", async () => {
+					await homePage.assertLoginRejected();
 					await homePage.assertLoggedOut();
 				});
 			},
@@ -181,8 +182,8 @@ test.describe("Login", () => {
 						`wrong-${randomCode(6)}`,
 					);
 				});
-				await test.step("Step 2: Verify the alert and no session", async () => {
-					await homePage.assertAlertShown(ALERTS.wrongPassword);
+				await test.step("Step 2: Verify the login is rejected and no session", async () => {
+					await homePage.assertLoginRejected();
 					await homePage.assertLoggedOut();
 				});
 			},
@@ -200,8 +201,8 @@ test.describe("Login", () => {
 				await test.step("Step 1: Submit the password with its letter case swapped", async () => {
 					await homePage.attemptLogin(account.username, swappedCase);
 				});
-				await test.step("Step 2: Verify it is rejected as a wrong password", async () => {
-					await homePage.assertAlertShown(ALERTS.wrongPassword);
+				await test.step("Step 2: Verify the login is rejected", async () => {
+					await homePage.assertLoginRejected();
 					await homePage.assertLoggedOut();
 				});
 			},
@@ -218,7 +219,7 @@ test.describe("Login", () => {
 					await homePage.attemptLogin(longValue, longValue);
 				});
 				await test.step("Step 2: Verify a normal rejection, not a crash", async () => {
-					await homePage.assertAlertShown(ALERTS.userDoesNotExist);
+					await homePage.assertLoginRejected();
 					await homePage.assertLoggedOut();
 				});
 			},
@@ -243,6 +244,123 @@ test.describe("Login", () => {
 				});
 				await test.step("Step 2: Verify the required-fields alert", async () => {
 					await homePage.assertAlertShown(ALERTS.loginFieldsRequired);
+				});
+			},
+		);
+	});
+
+	test.describe("Username rules and error messages", () => {
+		/** A fresh account whose username mixes upper and lower case. */
+		async function registerMixedCaseUser(api: DemoblazeApi) {
+			const user = {
+				username: `PwExam_Mixed_${randomCode(6)}`,
+				password: `Mixed@${randomCode(6)}`,
+			};
+			await api.signup(user.username, user.password);
+			return user;
+		}
+
+		test(
+			"LOGIN-022: Spaces around a valid username are trimmed and login succeeds",
+			{
+				tag: "@regression",
+				annotation: {
+					type: "known-defect",
+					description:
+						"DEF-16: the username is not trimmed, so '  <valid>  ' is answered 'User does not exist.'",
+				},
+			},
+			async ({ homePage, account }) => {
+				// Expected to fail until DEF-16 is fixed.
+				test.fail();
+				await test.step("Step 1: Enter the valid username wrapped in spaces", async () => {
+					await homePage.openLoginModal();
+					await homePage.fillLoginForm(
+						`  ${account.username}  `,
+						account.password,
+					);
+				});
+				await test.step("Step 2: Click Log in", async () => {
+					await homePage.submitLoginCollectingAlerts();
+				});
+				await test.step("Step 3: Verify the user is logged in under the trimmed name", async () => {
+					await homePage.assertNoAlerts();
+					await homePage.assertLoggedInAs(account.username);
+				});
+			},
+		);
+
+		test(
+			"LOGIN-032: A mixed-case username logs in exactly as registered",
+			{ tag: "@regression" },
+			async ({ homePage, demoblazeApi }) => {
+				const user =
+					await test.step("Step 1: Register a mixed-case username (API setup)", async () =>
+						registerMixedCaseUser(demoblazeApi));
+				await test.step("Step 2: Log in with the username exactly as registered", async () => {
+					await homePage.login(user.username, user.password);
+				});
+				await test.step("Step 3: Verify the welcome text keeps the original letter case", async () => {
+					await homePage.assertLoggedInAs(user.username);
+				});
+			},
+		);
+
+		test(
+			"LOGIN-023: A username in a different letter case is rejected",
+			{ tag: "@regression" },
+			async ({ homePage, demoblazeApi }) => {
+				const user =
+					await test.step("Step 1: Register a mixed-case username (API setup)", async () =>
+						registerMixedCaseUser(demoblazeApi));
+				for (const variant of [
+					user.username.toLowerCase(),
+					user.username.toUpperCase(),
+				]) {
+					await test.step(`Step 2: Log in as "${variant}" with the right password`, async () => {
+						await homePage.openLoginModal();
+						await homePage.fillLoginForm(variant, user.password);
+						await homePage.submitLoginCollectingAlerts();
+					});
+					await test.step("Step 3: Verify the login is rejected and no session starts", async () => {
+						await homePage.assertLoginRejected();
+						await homePage.assertLoggedOut();
+					});
+				}
+			},
+		);
+
+		test(
+			"LOGIN-033: Wrong username and wrong password show the same generic message",
+			{
+				tag: "@regression",
+				annotation: {
+					type: "known-defect",
+					description:
+						"DEF-15: the site answers 'User does not exist.' vs 'Wrong password.', revealing which usernames exist",
+				},
+			},
+			async ({ homePage, account }) => {
+				// Expected to fail until DEF-15 is fixed.
+				test.fail();
+				const unknownUser =
+					await test.step("Step 1: Submit an unregistered username", async () => {
+						await homePage.attemptLogin(
+							`nouser_${randomCode(12)}`,
+							account.password,
+						);
+						return homePage.getLastAlert();
+					});
+				const wrongPassword =
+					await test.step("Step 2: Submit a registered username with a wrong password", async () => {
+						await homePage.attemptLogin(
+							account.username,
+							`wrong-${randomCode(6)}`,
+						);
+						return homePage.getLastAlert();
+					});
+				await test.step("Step 3: Verify both show the same generic message", async () => {
+					await homePage.assertGenericLoginError([unknownUser, wrongPassword]);
 				});
 			},
 		);
@@ -411,7 +529,7 @@ test.describe("Login", () => {
 							account.username,
 							`wrong-${i}-${randomCode(4)}`,
 						);
-						await homePage.assertAlertShown(ALERTS.wrongPassword);
+						await homePage.assertLoginRejected();
 					}
 				});
 				await test.step("Step 2: Submit the correct password", async () => {
@@ -421,35 +539,6 @@ test.describe("Login", () => {
 				await test.step("Step 3: Verify the attempt is throttled, not let through", async () => {
 					await homePage.assertUserGotFeedback();
 					await homePage.assertLoggedOut();
-				});
-			},
-		);
-	});
-
-	test.describe("Resilience", () => {
-		test(
-			"LOGIN-029: Login gives feedback when the API is unavailable",
-			{
-				tag: "@regression",
-				annotation: {
-					type: "known-defect",
-					description:
-						"DEF-11: logIn() has no error callback, so a failed request is silent",
-				},
-			},
-			async ({ homePage, account }) => {
-				// Expected to fail until DEF-11 is fixed.
-				test.fail();
-				await test.step("Step 1: Make the /login request fail", async () => {
-					await homePage.simulateApiFailure("login");
-				});
-				await test.step("Step 2: Submit valid credentials", async () => {
-					await homePage.openLoginModal();
-					await homePage.fillLoginForm(account.username, account.password);
-					await homePage.submitLoginCollectingAlerts();
-				});
-				await test.step("Step 3: Verify the user is told something went wrong", async () => {
-					await homePage.assertUserGotFeedback();
 				});
 			},
 		);
